@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OKX 量化交易</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --green: #3fb950;
+      --red: #f85149;
+      --accent: #58a6ff;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Noto Sans SC', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text-muted);
+    }
+    .form-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; }
+    .form-row label { min-width: 80px; color: var(--text-muted); font-size: 0.9rem; }
+    input, select, button {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+    input::placeholder { color: var(--text-muted); }
+    input[type="password"] { letter-spacing: 0.05em; }
+    button {
+      cursor: pointer;
+      font-weight: 500;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 8px 16px;
+    }
+    button:hover { opacity: 0.9; }
+    button.danger { background: var(--red); color: #fff; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 768px) { .grid2 { grid-template-columns: 1fr; } }
+    .balance-list { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+    .balance-list div { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+    .balance-list div:last-child { border-bottom: none; }
+    .up { color: var(--green); }
+    .down { color: var(--red); }
+    .ticker-price { font-size: 1.5rem; font-weight: 600; }
+    .orders-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .orders-table th, .orders-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    .orders-table th { color: var(--text-muted); font-weight: 500; }
+    .orders-table .buy { color: var(--green); }
+    .orders-table .sell { color: var(--red); }
+    .msg { margin-top: 8px; font-size: 0.85rem; padding: 8px; border-radius: 6px; }
+    .msg.err { background: rgba(248,81,73,0.15); color: var(--red); }
+    .msg.ok { background: rgba(63,185,80,0.15); color: var(--green); }
+    .checkbox { display: flex; align-items: center; gap: 8px; }
+    .checkbox input { width: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>OKX 量化交易</h1>
+
+    <div class="card">
+      <h2>套利：全局启动 / 停止（全 WebSocket，支持模拟盘）</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">启动后买卖由内部按策略执行，无需手动下单；每次订单会完整记录在下方「订单记录」中。</p>
+      <div class="form-row">
+        <label>交易对</label>
+        <input type="text" id="arbInstId" value="BTC-USDT" placeholder="如 BTC-USDT" style="width: 120px;">
+        <label>下单金额(USDT)</label>
+        <input type="text" id="arbOrderAmt" placeholder="如 100" style="width: 100px;">
+        <label>止损%</label>
+        <input type="text" id="arbSlPct" value="5" style="width: 50px;">
+        <label>追踪%</label>
+        <input type="text" id="arbTrailValue" value="2" style="width: 50px;">
+        <div class="checkbox">
+          <input type="checkbox" id="arbSimulated">
+          <label for="arbSimulated">模拟盘</label>
+        </div>
+        <button type="button" id="btnArbStart" class="start-btn">启动</button>
+        <button type="button" id="btnArbStop" class="danger">停止</button>
+      </div>
+      <div id="arbStatus" class="msg" style="display: none; margin-top: 8px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>订单记录（每次推送完整保存）</h2>
+      <div class="form-row">
+        <label>最近条数</label>
+        <input type="text" id="recordsN" value="100" placeholder="留空全部" style="width: 80px;">
+        <button type="button" id="btnRecords">刷新</button>
+      </div>
+      <div id="recordsResult" style="margin-top: 12px; overflow-x: auto;"></div>
+    </div>
+
+    <div class="card">
+      <h2>API 配置</h2>
+      <div class="form-row">
+        <label>API Key</label>
+        <input type="text" id="apiKey" placeholder="OKX API Key" style="width: 280px;">
+        <label>Secret</label>
+        <input type="password" id="secretKey" placeholder="Secret Key" style="width: 200px;">
+        <label>Passphrase</label>
+        <input type="password" id="passphrase" placeholder="Passphrase" style="width: 120px;">
+        <div class="checkbox">
+          <input type="checkbox" id="simulated">
+          <label for="simulated">模拟盘</label>
+        </div>
+        <button type="button" id="btnSaveConfig">保存到本页</button>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px;">密钥仅保存在当前页面内存，刷新即清空。生产环境建议使用环境变量。</p>
+      <div id="apiConfigStatus" class="msg" style="display: none; margin-top: 8px;"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>账户余额</h2>
+        <button type="button" id="btnBalance">查询余额</button>
+        <div id="balanceResult" class="balance-list" style="margin-top: 12px;"></div>
+      </div>
+      <div class="card">
+        <h2>行情</h2>
+        <div class="form-row">
+          <label>交易对</label>
+          <input type="text" id="tickerInstId" value="BTC-USDT" style="width: 140px;">
+          <button type="button" id="btnTicker">查询</button>
+        </div>
+        <div id="tickerResult" style="margin-top: 12px;"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>下单（现货）</h2>
+      <div class="form-row">
+        <label>交易对</label>
+        <input type="text" id="orderInstId" value="BTC-USDT" placeholder="如 BTC-USDT" style="width: 120px;">
+        <label>方向</label>
+        <select id="orderSide" style="width: 80px;">
+          <option value="buy">买入</option>
+          <option value="sell">卖出</option>
+        </select>
+        <label>类型</label>
+        <select id="orderType" style="width: 90px;">
+          <option value="market">市价</option>
+          <option value="limit">限价</option>
+        </select>
+        <label>数量</label>
+        <input type="text" id="orderSz" placeholder="0.001" style="width: 100px;">
+        <label>价格（限价必填）</label>
+        <input type="text" id="orderPx" placeholder="可选" style="width: 120px;">
+        <button type="button" id="btnPlaceOrder">下单</button>
+      </div>
+      <div id="orderMsg" class="msg" style="display: none;"></div>
+    </div>
+
+    <div class="card">
+      <h2>当前委托</h2>
+      <div class="form-row">
+        <label>交易对</label>
+        <input type="text" id="pendingInstId" placeholder="留空查全部" style="width: 120px;">
+        <button type="button" id="btnPending">查询</button>
+      </div>
+      <div id="pendingResult" style="margin-top: 12px; overflow-x: auto;"></div>
+    </div>
+
+    <div class="card">
+      <h2>止损 / 追踪止盈</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">使用 WebSocket 实时接收买一卖一，高频检查。不设固定止盈；盈利后从最高价回撤一定比例或 U 时市价平仓。止损为入场价下方（多）/ 上方（空）的百分比。</p>
+      <div class="form-row">
+        <label>交易对</label>
+        <input type="text" id="monInstId" value="BTC-USDT" placeholder="如 BTC-USDT" style="width: 110px;">
+        <label>入场价</label>
+        <input type="text" id="monEntry" placeholder="如 95000" style="width: 100px;">
+        <label>数量</label>
+        <input type="text" id="monSz" placeholder="0.001" style="width: 90px;">
+        <label>方向</label>
+        <select id="monSide" style="width: 70px;">
+          <option value="buy">多</option>
+          <option value="sell">空</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>止损%</label>
+        <input type="text" id="monSlPct" placeholder="5" style="width: 60px;" title="如 5 表示亏损 5% 触发">
+        <label>追踪</label>
+        <select id="monTrailType" style="width: 80px;">
+          <option value="pct">百分比</option>
+          <option value="u">U</option>
+        </select>
+        <input type="text" id="monTrailValue" placeholder="2 或 500" style="width: 80px;" title="百分比填如 2；U 填如 500（价格差 USDT）">
+        <button type="button" id="btnMonitorStart">开始监控</button>
+      </div>
+      <div id="monitorMsg" class="msg" style="display: none;"></div>
+      <h3 style="font-size: 0.9rem; margin: 16px 0 8px; color: var(--text-muted);">监控列表</h3>
+      <button type="button" id="btnMonitorList">刷新</button>
+      <div id="monitorList" style="margin-top: 8px;"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+    let serverHasConfig = false; // 服务端环境变量是否已配置
+    function getConfig() {
+      return {
+        apiKey: document.getElementById('apiKey').value.trim(),
+        secretKey: document.getElementById('secretKey').value.trim(),
+        passphrase: document.getElementById('passphrase').value.trim(),
+        simulated: document.getElementById('simulated').checked
+      };
+    }
+    function hasConfig() {
+      if (serverHasConfig) return true; // 服务端已配置则视为可用
+      const c = getConfig();
+      return c.apiKey && c.secretKey && c.passphrase;
+    }
+    function showMsg(elId, text, isErr) {
+      const el = document.getElementById(elId);
+      el.style.display = 'block';
+      el.textContent = text;
+      el.className = 'msg ' + (isErr ? 'err' : 'ok');
+    }
+
+    // 页面加载时检查服务端是否已配置环境变量
+    (async function checkServerConfig() {
+      try {
+        const r = await fetch(API + '/api/config/status');
+        const data = await r.json();
+        const el = document.getElementById('apiConfigStatus');
+        if (data.hasServerConfig) {
+          serverHasConfig = true;
+          el.style.display = 'block';
+          el.className = 'msg ok';
+          el.textContent = '已使用服务端环境变量配置（OKX_API_KEY 等），可直接查询余额、下单、监控。' + (data.simulated ? ' [模拟盘]' : '');
+        } else {
+          serverHasConfig = false;
+          el.style.display = 'none';
+        }
+      } catch (e) {}
+    })();
+
+    document.getElementById('btnSaveConfig').addEventListener('click', () => {
+      if (hasConfig()) alert('已保存，可直接使用查询/下单。');
+      else alert('请填写 API Key、Secret、Passphrase。');
+    });
+
+    document.getElementById('btnBalance').addEventListener('click', async () => {
+      const out = document.getElementById('balanceResult');
+      if (!hasConfig()) { out.innerHTML = '<span style="color: var(--red);">请先填写并保存 API 配置</span>'; return; }
+      out.innerHTML = '加载中...';
+      try {
+        const r = await fetch(API + '/api/balance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getConfig())
+        });
+        const data = await r.json();
+        if (!r.ok) { out.innerHTML = '<span class="down">' + (data.error || r.status) + '</span>'; return; }
+        if (!data.data || !data.data.length) { out.innerHTML = '无数据'; return; }
+        const details = data.data[0].details || [];
+        let html = '<div><strong>总权益 (USD)</strong><span>' + (data.data[0].totalEq || '0') + '</span></div>';
+        details.filter(d => parseFloat(d.eq) > 0).forEach(d => {
+          html += '<div><span>' + d.ccy + '</span><span>' + d.eq + ' (可用 ' + d.availEq + ')</span></div>';
+        });
+        out.innerHTML = html;
+      } catch (e) {
+        out.innerHTML = '<span class="down">' + e.message + '</span>';
+      }
+    });
+
+    document.getElementById('btnTicker').addEventListener('click', async () => {
+      const instId = document.getElementById('tickerInstId').value.trim() || 'BTC-USDT';
+      const out = document.getElementById('tickerResult');
+      out.innerHTML = '加载中...';
+      try {
+        const r = await fetch(API + '/api/ticker?instId=' + encodeURIComponent(instId));
+        const data = await r.json();
+        if (!r.ok) { out.innerHTML = '<span class="down">' + (data.error || r.status) + '</span>'; return; }
+        const t = (data.data && data.data[0]) || {};
+        out.innerHTML = '<div class="ticker-price">' + t.last + '</div>' +
+          '<div style="color: var(--text-muted); margin-top: 4px;">买一 ' + t.bidPx + ' &nbsp; 卖一 ' + t.askPx + ' &nbsp; 24h 量 ' + (t.vol24h || '-') + '</div>';
+      } catch (e) {
+        out.innerHTML = '<span class="down">' + e.message + '</span>';
+      }
+    });
+
+    document.getElementById('btnPlaceOrder').addEventListener('click', async () => {
+      if (!hasConfig()) { showMsg('orderMsg', '请先填写 API 配置', true); return; }
+      const instId = document.getElementById('orderInstId').value.trim();
+      const side = document.getElementById('orderSide').value;
+      const ordType = document.getElementById('orderType').value;
+      const sz = document.getElementById('orderSz').value.trim();
+      const px = document.getElementById('orderPx').value.trim();
+      if (!instId || !sz) { showMsg('orderMsg', '请填写交易对和数量', true); return; }
+      if (ordType === 'limit' && !px) { showMsg('orderMsg', '限价单请填写价格', true); return; }
+      const msgEl = document.getElementById('orderMsg');
+      msgEl.style.display = 'block';
+      msgEl.textContent = '提交中...';
+      try {
+        const r = await fetch(API + '/api/order/place', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...getConfig(),
+            instId,
+            tdMode: 'cash',
+            side,
+            ordType,
+            sz,
+            px: px || undefined
+          })
+        });
+        const data = await r.json();
+        if (!r.ok) { showMsg('orderMsg', data.error || r.status, true); return; }
+        const d = data.data && data.data[0];
+        showMsg('orderMsg', '下单成功 ' + (d ? '订单号 ' + d.ordId : ''), false);
+        document.getElementById('btnPending').click();
+      } catch (e) {
+        showMsg('orderMsg', e.message, true);
+      }
+    });
+
+    document.getElementById('btnPending').addEventListener('click', async () => {
+      const out = document.getElementById('pendingResult');
+      if (!hasConfig()) { out.innerHTML = '<span style="color: var(--red);">请先填写 API 配置</span>'; return; }
+      out.innerHTML = '加载中...';
+      try {
+        const instId = document.getElementById('pendingInstId').value.trim();
+        const r = await fetch(API + '/api/orders/pending?instType=SPOT' + (instId ? '&instId=' + encodeURIComponent(instId) : ''), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getConfig())
+        });
+        const data = await r.json();
+        if (!r.ok) { out.innerHTML = '<span class="down">' + (data.error || r.status) + '</span>'; return; }
+        const list = data.data || [];
+        if (list.length === 0) { out.innerHTML = '暂无委托'; return; }
+        let html = '<table class="orders-table"><thead><tr><th>交易对</th><th>方向</th><th>类型</th><th>价格</th><th>数量</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+        list.forEach(o => {
+          html += '<tr><td>' + o.instId + '</td><td class="' + o.side + '">' + o.side + '</td><td>' + o.ordType + '</td><td>' + (o.px || '-') + '</td><td>' + o.sz + '</td><td>' + o.state + '</td><td><button type="button" class="danger cancel-btn" data-instid="' + o.instId + '" data-ordid="' + o.ordId + '">撤单</button></td></tr>';
+        });
+        html += '</tbody></table>';
+        out.innerHTML = html;
+        out.querySelectorAll('.cancel-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('确认撤单？')) return;
+            try {
+              const r = await fetch(API + '/api/order/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ...getConfig(),
+                  instId: btn.dataset.instid,
+                  ordId: btn.dataset.ordid
+                })
+              });
+              const data = await r.json();
+              if (r.ok) document.getElementById('btnPending').click();
+              else alert(data.error || '撤单失败');
+            } catch (e) { alert(e.message); }
+          });
+        });
+      } catch (e) {
+        out.innerHTML = '<span class="down">' + e.message + '</span>';
+      }
+    });
+
+    // 止损/追踪止盈
+    document.getElementById('btnMonitorStart').addEventListener('click', async () => {
+      if (!hasConfig()) { showMsg('monitorMsg', '请先填写 API 配置', true); return; }
+      const instId = document.getElementById('monInstId').value.trim();
+      const entryPrice = document.getElementById('monEntry').value.trim();
+      const sz = document.getElementById('monSz').value.trim();
+      const side = document.getElementById('monSide').value;
+      const stopLossPct = parseFloat(document.getElementById('monSlPct').value) || 5;
+      const trailType = document.getElementById('monTrailType').value;
+      const trailValue = parseFloat(document.getElementById('monTrailValue').value) || (trailType === 'pct' ? 2 : 500);
+      if (!instId || !entryPrice || !sz) { showMsg('monitorMsg', '请填写交易对、入场价、数量', true); return; }
+      const msgEl = document.getElementById('monitorMsg');
+      msgEl.style.display = 'block';
+      msgEl.textContent = '提交中...';
+      try {
+        const r = await fetch(API + '/api/monitor/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...getConfig(),
+            instId,
+            entryPrice,
+            sz,
+            side,
+            stopLossPct,
+            trailType,
+            trailValue
+          })
+        });
+        const data = await r.json();
+        if (!r.ok) { showMsg('monitorMsg', data.error || r.status, true); return; }
+        showMsg('monitorMsg', '已开始监控 ' + (data.id || ''), false);
+        document.getElementById('btnMonitorList').click();
+      } catch (e) {
+        showMsg('monitorMsg', e.message, true);
+      }
+    });
+
+    document.getElementById('btnMonitorList').addEventListener('click', async () => {
+      const out = document.getElementById('monitorList');
+      try {
+        const r = await fetch(API + '/api/monitor/list');
+        const data = await r.json();
+        const list = data.data || [];
+        if (list.length === 0) { out.innerHTML = '<span style="color: var(--text-muted);">暂无监控</span>'; return; }
+        let html = '<table class="orders-table"><thead><tr><th>交易对</th><th>方向</th><th>入场价</th><th>数量</th><th>止损%</th><th>追踪</th><th>最高/最低</th><th>操作</th></tr></thead><tbody>';
+        list.forEach(m => {
+          const trail = m.trailType === 'pct' ? m.trailValue + '%' : m.trailValue + 'U';
+          html += '<tr><td>' + m.instId + '</td><td>' + m.side + '</td><td>' + m.entryPrice + '</td><td>' + m.sz + '</td><td>' + m.stopLossPct + '%</td><td>' + trail + '</td><td>' + (m.highPrice || '-') + '</td><td><button type="button" class="danger stop-mon" data-id="' + m.id + '">停止</button></td></tr>';
+        });
+        html += '</tbody></table>';
+        out.innerHTML = html;
+        out.querySelectorAll('.stop-mon').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            try {
+              await fetch(API + '/api/monitor/stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: btn.dataset.id })
+              });
+              document.getElementById('btnMonitorList').click();
+            } catch (e) { alert(e.message); }
+          });
+        });
+      } catch (e) {
+        out.innerHTML = '<span class="down">' + e.message + '</span>';
+      }
+    });
+
+    // 套利：全局启动 / 停止
+    document.getElementById('btnArbStart').addEventListener('click', async () => {
+      if (!hasConfig()) { showMsg('arbStatus', '请先填写 API 配置', true); return; }
+      const instId = document.getElementById('arbInstId').value.trim() || 'BTC-USDT';
+      const orderAmt = document.getElementById('arbOrderAmt').value.trim();
+      const stopLossPct = parseFloat(document.getElementById('arbSlPct').value) || 5;
+      const trailValue = parseFloat(document.getElementById('arbTrailValue').value) || 2;
+      const simulated = document.getElementById('arbSimulated').checked;
+      if (!orderAmt) { showMsg('arbStatus', '请填写下单金额(USDT)', true); return; }
+      const msgEl = document.getElementById('arbStatus');
+      msgEl.style.display = 'block';
+      msgEl.textContent = '正在连接 WebSocket 并启动…';
+      try {
+        const r = await fetch(API + '/api/arb/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...getConfig(),
+            instId,
+            orderAmt,
+            stopLossPct,
+            trailType: 'pct',
+            trailValue,
+            simulated
+          })
+        });
+        const data = await r.json();
+        if (!r.ok) { showMsg('arbStatus', data.error || r.status, true); return; }
+        showMsg('arbStatus', data.msg || '已启动', false);
+        document.getElementById('btnRecords').click();
+      } catch (e) {
+        showMsg('arbStatus', e.message, true);
+      }
+    });
+
+    document.getElementById('btnArbStop').addEventListener('click', async () => {
+      try {
+        const r = await fetch(API + '/api/arb/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const data = await r.json();
+        if (r.ok) showMsg('arbStatus', data.msg || '已停止', false);
+        else showMsg('arbStatus', data.error || '停止失败', true);
+      } catch (e) {
+        showMsg('arbStatus', e.message, true);
+      }
+    });
+
+    // 订单记录
+    document.getElementById('btnRecords').addEventListener('click', async () => {
+      const out = document.getElementById('recordsResult');
+      const n = document.getElementById('recordsN').value.trim();
+      let url = API + '/api/orders/records';
+      if (n) url += '?n=' + encodeURIComponent(n);
+      try {
+        const r = await fetch(url);
+        const data = await r.json();
+        const list = data.data || [];
+        if (list.length === 0) { out.innerHTML = '<span style="color: var(--text-muted);">暂无订单记录</span>'; return; }
+        let html = '<table class="orders-table"><thead><tr><th>时间</th><th>ordId</th><th>instId</th><th>side</th><th>ordType</th><th>sz</th><th>px</th><th>avgPx</th><th>fillSz</th><th>state</th><th>fee</th><th>uTime</th></tr></thead><tbody>';
+        list.forEach(o => {
+          const time = o.receivedAt ? new Date(o.receivedAt).toLocaleString() : '-';
+          html += '<tr><td>' + time + '</td><td>' + (o.ordId || '-') + '</td><td>' + (o.instId || '-') + '</td><td class="' + (o.side || '') + '">' + (o.side || '-') + '</td><td>' + (o.ordType || '-') + '</td><td>' + (o.sz || '-') + '</td><td>' + (o.px || '-') + '</td><td>' + (o.avgPx || '-') + '</td><td>' + (o.fillSz || '-') + '</td><td>' + (o.state || '-') + '</td><td>' + (o.fee || '-') + '</td><td>' + (o.uTime || '-') + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        out.innerHTML = html;
+      } catch (e) {
+        out.innerHTML = '<span class="down">' + e.message + '</span>';
+      }
+    });
+
+    // 默认查一次行情
+    document.getElementById('btnTicker').click();
+  </script>
+</body>
+</html>
