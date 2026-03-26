@@ -85,15 +85,23 @@ go run .
 
 本程序仅供学习与自用，使用 OKX API 进行真实交易需自行承担风险。请遵守 OKX 用户协议与当地法规。
 
-##推送命令
+## 一键推送
+
 ```bash
-git status
+push.bat
+```
+
+说明：
+
+- 已新增项目根目录脚本：`push.bat`
+- 每次修改代码后，双击运行或在项目根目录执行 `.\push.bat`
+- 脚本会自动执行：`git add .` -> `git commit -m "提交信息"` -> `git push -u origin 当前分支`
+- 运行时可输入提交信息；如果留空，会自动使用当前时间作为提交说明
+
+如果你还想保留手动命令，可使用：
+
+```bash
 git add .
-git commit -m "Update project files and main.go"
-git commit -m "Update project files and README.md"
-git commit -m ""
-git push -u origin main -f
-git push origin main
-git rev-list --count HEAD  #获取已提交吗的次数
-git shortlog -s -n  #个人的提交次数 -s: 只显示提交总数（summary）。 -n: 按次数从高到低排序（numbered）。
+git commit -m "your message"
+git push -u origin main
 ```
