@@ -105,4 +105,15 @@ git add .
 git commit -m "your message"
 git push -u origin main
 ```
-#提交1
+
+## 查询提交次数
+
+```bash
+git rev-list --count HEAD
+git shortlog -s -n
+```
+
+说明：
+
+- `git rev-list --count HEAD`：查看当前仓库总提交次数
+- `git shortlog -s -n`：按提交次数从高到低显示贡献者统计
