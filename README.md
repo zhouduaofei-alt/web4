@@ -84,3 +84,14 @@ go run .
 ## 免责声明
 
 本程序仅供学习与自用，使用 OKX API 进行真实交易需自行承担风险。请遵守 OKX 用户协议与当地法规。
+
+##推送命令
+```bash
+git commit -m "Update project files and main.go"
+git commit -m "Update project files and README.md"
+git commit -m ""
+git push -u origin main -f
+git push origin main
+git status
+git add .
+```
