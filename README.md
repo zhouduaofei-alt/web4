@@ -26,6 +26,22 @@ go run .
 
 浏览器打开 `http://localhost:8080`，在「API 配置」中填写 OKX API 信息后即可使用。
 
+### 编译为 EXE
+
+在项目根目录执行：
+
+```powershell
+go build -o okx.exe .
+```
+
+编译成功后会在当前目录生成 `okx.exe`。
+
+运行：
+
+```powershell
+.\okx.exe
+```
+
 ### 使用环境变量（可选）
 
 生产环境建议用环境变量，避免在页面输入密钥：

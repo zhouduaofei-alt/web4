@@ -21,7 +21,7 @@ import (
 	"go-okx-trading/internal/wstrade"
 )
 
-//go:embed web
+//go:embed web3
 var webFS embed.FS
 
 var (
