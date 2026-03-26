@@ -95,4 +95,5 @@ git commit -m ""
 git push -u origin main -f
 git push origin main
 git rev-list --count HEAD  #获取已提交吗的次数
+git shortlog -s -n  #个人的提交次数
 ```
