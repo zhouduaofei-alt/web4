@@ -87,11 +87,13 @@ go run .
 
 ##推送命令
 ```bash
+
+
+git status
+git add .
 git commit -m "Update project files and main.go"
 git commit -m "Update project files and README.md"
 git commit -m ""
 git push -u origin main -f
 git push origin main
-git status
-git add .
 ```
