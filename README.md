@@ -23,7 +23,7 @@ go mod tidy
 # 启动服务（默认 http://localhost:8080）
 go run .
 ```
-#修噶
+
 
 浏览器打开 `http://localhost:8080`，在「API 配置」中填写 OKX API 信息后即可使用。
 
