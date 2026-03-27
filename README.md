@@ -118,4 +118,4 @@ git shortlog -s -n
 - `git rev-list --count HEAD`：查看当前仓库总提交次数
 - `git shortlog -s -n`：按提交次数从高到低显示贡献者统计
 
-##合格1
+##合格23
